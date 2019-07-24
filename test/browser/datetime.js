@@ -131,7 +131,7 @@ describe("DateTime input field with mm:ss pattern", function() {
   });
 });
 
-describe("DateTime ISO time", function() {
+describe("DateTime ISO time only", function() {
   var field = document.querySelector(".input-time");
   var cleave = new Cleave(field, {
     dateTime: true,
@@ -147,7 +147,7 @@ describe("DateTime ISO time", function() {
 
   it("should get correct ISO time", function() {
     cleave.setRawValue("8080");
-    assert.equal(cleave.getISOFormatTime(), "08:08:0");
+    assert.equal(cleave.getISOFormatTime(), "08:08:00");
   });
 
   it("should fill in large values and get correct ISO time", function() {
@@ -165,5 +165,34 @@ describe("DateTime ISO time", function() {
     cleave.setRawValue("78");
     cleave.setRawValue("7");
     assert.equal(field.value, "07:");
+  });
+});
+
+describe("DateTime ISO date and time", function() {
+  var field = document.querySelector(".input-time");
+  var cleave = new Cleave(field, {
+    dateTime: true,
+    dateTimePattern: ["M", "d", "Y", "h", "m", "s"],
+    delimiters: ["/", "/", " ", ":", ":"]
+  });
+
+  it("should get correct ISO date and time", function() {
+    cleave.setRawValue("12311980808080");
+    assert.equal(cleave.getISOFormatDateTime(), "1980-12-31 08:08:08");
+  });
+
+  it("should get correct ISO date when only date has been supplied", function() {
+    cleave.setRawValue("12311980");
+    assert.equal(cleave.getISOFormatDateTime(), "1980-12-31");
+  });
+
+  it("should fill in large values and get correct ISO time", function() {
+    cleave.setRawValue("88771990789");
+    assert.equal(cleave.getISOFormatDateTime(), "1990-08-07 07:08:09");
+  });
+
+  it("should respect zero-pad the hour", function() {
+    cleave.setRawValue("7");
+    assert.equal(field.value, "07/");
   });
 });

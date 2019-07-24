@@ -101,9 +101,10 @@ DateTimeFormatter.prototype = {
   getISOFormatDateTime: function() {
     var owner = this,
       datetime = owner.datetime;
-
-    return datetime.year
-      ? this.getISOFormatDate() + " " + this.getISOFormatTime()
+    var dateStr = this.getISOFormatDate();
+    var timeStr = this.getISOFormatTime();
+    return datetime.year && dateStr
+      ? dateStr + (timeStr ? " " + timeStr : "")
       : "";
   },
 
@@ -128,6 +129,7 @@ DateTimeFormatter.prototype = {
             if (sub === "00") {
               sub = "01";
             } else if (parseInt(sub0, 10) > 3) {
+              //rest = sub.length > 1 ? sub.slice(1) + rest : rest; // move next digit to rest, and zpad this out-of-bounds number
               sub = "0" + sub0;
             } else if (parseInt(sub, 10) > 31) {
               sub = "31";
@@ -139,6 +141,7 @@ DateTimeFormatter.prototype = {
             if (sub === "00") {
               sub = "01";
             } else if (parseInt(sub0, 10) > 1) {
+              //rest = sub.length > 1 ? sub.slice(1) + rest : rest; // move next digit to rest, and zpad this out-of-bounds number
               sub = "0" + sub0;
             } else if (parseInt(sub, 10) > 12) {
               sub = "12";
@@ -159,7 +162,7 @@ DateTimeFormatter.prototype = {
           case "m": // minute
           case "s": // second
             if (parseInt(sub0, 10) > timeFormatOptions.maxMinutesFirstDigit) {
-              rest = sub.length > 1 ? sub.slice(1) + rest : rest;
+              rest = sub.length > 1 ? sub.slice(1) + rest : rest; // move next digit to rest, and zpad this out-of-bounds number
               sub = "0" + sub0;
             } else if (parseInt(sub, 10) > timeFormatOptions.maxMinutes) {
               sub = timeFormatOptions.maxMinutes + "";
@@ -195,8 +198,9 @@ DateTimeFormatter.prototype = {
           blocks.push({
             part: type,
             blockIndex: index,
-            inputLength: 2,
-            value: null
+            targetInputLength: 2,
+            intValue: null,
+            strValue: null
           });
           break;
         case "Y": // 4 digit year
@@ -204,8 +208,9 @@ DateTimeFormatter.prototype = {
           blocks.push({
             part: type,
             blockIndex: index,
-            inputLength: type === "Y" ? 4 : 2,
-            value: null
+            targetInputLength: type === "Y" ? 4 : 2,
+            intValue: null,
+            strValue: null
           });
           break;
       }
@@ -213,16 +218,14 @@ DateTimeFormatter.prototype = {
 
     blocks.forEach(function(block) {
       if (value.length === 0) return block;
-      var str = value.slice(0, block.inputLength);
+      var str = value.slice(0, block.targetInputLength);
       var int = parseInt(str, 10);
       if (!isNaN(int)) {
-        block.value = parseInt(str, 10);
-        value = value.slice(block.inputLength);
+        block.intValue = int;
+        block.strValue = str;
+        value = value.slice(block.targetInputLength); // reduce value by extracted number
       }
     });
-    /*value = blocks.reduce(function(previous, block) {
-      return previous.slice(block.inputLength); // reduce value by the length we just took
-    }, value);*/
 
     var findPart = function(blocks, parts) {
       if (!Array.isArray(parts)) parts = [parts];
@@ -231,7 +234,7 @@ DateTimeFormatter.prototype = {
           return parts.indexOf(block.part) >= 0;
         })
         .map(function(block) {
-          return block.value;
+          return block.intValue;
         })
         .shift(); // returns undefined if not found
     };
@@ -239,25 +242,32 @@ DateTimeFormatter.prototype = {
     /// return an array (sorted) featuring block part and the date value [{part:, value:}]
     var datePartsBlockOrder = function(blocks, fixedDate, fullYearDone) {
       return blocks.map(function(block) {
+        var zpadLength = block.strValue ? block.strValue.length : 0; // re-pad to the length the user provided
         switch (block.part) {
           case "Y":
           case "y":
-            return owner.zpad(fixedDate.year, block.inputLength);
+            //return fixedDate.year;
+            return owner.zpad(fixedDate.year, zpadLength);
             break;
           case "M":
-            return owner.zpad(fixedDate.month, block.inputLength);
+            //return fixedDate.month;
+            return owner.zpad(fixedDate.month, zpadLength);
             break;
           case "d":
-            return owner.zpad(fixedDate.day, block.inputLength);
+            //return fixedDate.day;
+            return owner.zpad(fixedDate.day, zpadLength);
             break;
           case "h":
-            return owner.zpad(fixedDate.hour, block.inputLength);
+            //return fixedDate.hour;
+            return owner.zpad(fixedDate.hour, zpadLength);
             break;
           case "m":
-            return owner.zpad(fixedDate.minute, block.inputLength);
+            //return fixedDate.minute;
+            return owner.zpad(fixedDate.minute, zpadLength);
             break;
           case "s":
-            return owner.zpad(fixedDate.second, block.inputLength);
+            //return fixedDate.second;
+            return owner.zpad(fixedDate.second, zpadLength);
             break;
         }
       });
@@ -277,7 +287,9 @@ DateTimeFormatter.prototype = {
         return ["Y", "y"].indexOf(block.part) >= 0;
       })
       .map(function(block) {
-        return block.value == block.length;
+        return block.intValue
+          ? block.intValue.toString().length == block.length
+          : false;
       })
       .shift(); // returns undefined if not found;
     fullYearDone = fullYearDone ? fullYearDone : false;
@@ -293,7 +305,7 @@ DateTimeFormatter.prototype = {
 
     fixedDate = owner.getRangeFixedDate(fixedDate);
     owner.datetime = fixedDate;
-    var self = this;
+    /*var self = this;*/
     // issue here. We fix the fixed, bounded date, but then return back to our blocks to build the string
     var result =
       fixedDate.length === 0
@@ -302,9 +314,7 @@ DateTimeFormatter.prototype = {
             previous,
             datePartValue
           ) {
-            return (
-              previous + (datePartValue != null ? datePartValue.toString() : "")
-            );
+            return previous + (datePartValue != null ? datePartValue : "");
           },
           "");
     /*: blocks.reduce(function(previous, block) {
@@ -314,9 +324,13 @@ DateTimeFormatter.prototype = {
           }, "");*/
     return result;
   },
+  /***
+   * Returns the number as a string with a guaranteed minimum length of targetLength. Zeros are used to left-pad the number to reach that length.
+   * values of null or empty are returned as an empty string
+   */
   zpad: function(number, targetLength) {
     if (typeof number == "undefined" || number === null || number === "") {
-      return number;
+      return "";
     }
     var str = number.toString();
     if (str.length < targetLength) {
@@ -336,6 +350,10 @@ DateTimeFormatter.prototype = {
     return str;
   },
 
+  /***
+   * returns a date object (with time component intact) that is bound by the provided dateMin and dateMax properties.
+   * Dates outside this range will return either min or max (+ time parts)
+   */
   getRangeFixedDate: function(date) {
     /* min max date part indexes
 	0: day
@@ -390,10 +408,12 @@ DateTimeFormatter.prototype = {
             (dateMin.month === date.month && dateMin.day > date.day))))
     )
       return dateMin;
-
+    date.length = 6;
     return date;
   },
-
+  /***
+   * Returns an object with valid date part constraints (12 months, <=31 days, no more than 59 minutes and seconds).
+   */
   getFixedDate: function(year, month, day, hour, minute, second) {
     year = parseInt(year, 10);
     year = isNaN(year) ? null : year;
